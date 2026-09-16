@@ -1,4 +1,4 @@
-import { GoogleGenAI, Type } from "@google/genai";
+import { GoogleGenAI, Type, type FunctionDeclaration, type Schema, type Tool } from "@google/genai";
 import { listMessageIds, getMessageSummaries, type GmailMessageSummary } from "@/lib/gmail";
 import { CATEGORIES, type Category, type ClassifiedEmail, type SuggestedEvent } from "@/lib/types";
 import { getCachedScanResults, setCachedScanResults, type CachedScanResult } from "@/lib/cache";
@@ -38,8 +38,15 @@ interface Content {
 /**
  * Base toolset, available on every scan (free and paid): enumerate the
  * inbox, pull metadata in batches, record a category per email.
+ *
+ * Explicitly typed as FunctionDeclaration[] rather than left for TS to
+ * infer: without this, TS derives a structural union across the two
+ * object literals below (their `parameters.properties` shapes differ —
+ * one's empty, one has `ids`) and that inferred union doesn't satisfy the
+ * SDK's actual FunctionDeclaration type, which fails at the call site
+ * instead of here where the real cause is visible.
  */
-const BASE_TOOLS = [
+const BASE_TOOLS: FunctionDeclaration[] = [
   {
     name: "list_emails",
     description:
@@ -72,8 +79,8 @@ const BASE_TOOLS = [
  * (and token cost) smaller and because those fields are meaningless for an
  * account that has no calendar/delete actions to attach them to.
  */
-function buildRecordClassificationsTool(subscribed: boolean) {
-  const itemProperties: Record<string, unknown> = {
+function buildRecordClassificationsTool(subscribed: boolean): FunctionDeclaration {
+  const itemProperties: Record<string, Schema> = {
     id: { type: Type.STRING },
     category: { type: Type.STRING, enum: CATEGORIES },
   };
@@ -214,7 +221,7 @@ async function classifyBatch(
   const classifications = new Map<string, ClassifiedEmail>();
   const details = new Map<string, GmailMessageSummary>();
 
-  const tools = [{ functionDeclarations: [...BASE_TOOLS, buildRecordClassificationsTool(subscribed)] }];
+  const tools: Tool[] = [{ functionDeclarations: [...BASE_TOOLS, buildRecordClassificationsTool(subscribed)] }];
   const systemInstruction = buildSystemInstruction(subscribed);
 
   const contents: Content[] = [
